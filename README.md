@@ -10,14 +10,11 @@ Most ML tutorials start with `import torch`. This repo starts with nothing: no N
 
 ## The learning path
 
-| Stage | What you build | Language | Status |
-|-------|----------------|----------|--------|
-| 1 | A neural net from scratch | Python | [x] |
-| 2 | Batching | Python | [] |
-| 3 | Attention | Python | [] |
-| 4 | A transformer | Python | [] |
-| 5 | Port the tensor library to C and call it from Python (ctypes) | Python + C | [] |
-| 5 | TBD | NA | [] |
+| Stage | What you build | Language | Status | Perf |
+|-------|----------------|----------|--------|------|
+| 1 | A neural net from scratch | Python | [x] | 100% |
+| 2 | Improving the layer Struct | Python | [x] | 100% |
+| 3 | Batching the inputs | Python | [x] | ~98% |
 
 ## Getting started
 
