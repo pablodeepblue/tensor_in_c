@@ -12,12 +12,12 @@ Most ML tutorials start with `import torch`. This repo starts with nothing: no N
 
 | Stage | What you build | Language | Status |
 |-------|----------------|----------|--------|
-| 1 | A neural net from scratch | Python | ⬜ |
-| 2 | Batching | Python | ⬜ |
-| 3 | A tensor type and its operations | Python | ⬜ |
-| 4 | A transformer | Python | ⬜ |
-| 5 | Port the tensor library to C and call it from Python (ctypes) | Python + C | ⬜ |
-| 5 | TBD | NA | ⬜ |
+| 1 | A neural net from scratch | Python | [x] |
+| 2 | Batching | Python | [] |
+| 3 | A tensor type and its operations | Python | [] |
+| 4 | A transformer | Python | [] |
+| 5 | Port the tensor library to C and call it from Python (ctypes) | Python + C | [] |
+| 5 | TBD | NA | [] |
 
 ## Getting started
 
