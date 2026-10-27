@@ -136,12 +136,12 @@ class Softmax:
 class Neural_Net:
     def __init__(self, input_size, *hidden_layers, output_size=None, activation_func=None):
         self.last_input = None
+        self.last_output = None
         self.net = []
-        self.backprop_calculator = []
         self.output_func = Softmax()
         if activation_func is None:
             activation_func = relu_activator
-        sizes = [input_size] + list(hidden_layers) + [] if output_size is None else [output_size]
+        sizes = [input_size] + list(hidden_layers) + ([output_size] if output_size else [])
         for i, (inp, oup) in enumerate(zip(sizes, sizes[1:])):
             self.net.append(Layer(inp, oup))
             if i == len(sizes) - 2:

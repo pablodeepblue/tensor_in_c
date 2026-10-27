@@ -68,7 +68,7 @@ def elu_derivative(x):
 
 # added this due to how much of it is needed now
 def copy_md_list(X):
-    return [x for x in X]
+    return [copy_md_list(x) if isinstance(x, list) else x for x in X]
 
 class Activator:
     def __init__(self, func, derivative):
@@ -118,16 +118,19 @@ class Layer:
         assert len(vector1) == len(vector2)
         return float(sum(x*y for x,y in zip(vector1, vector2)))
     
+    @staticmethod
+    def linear(input_, weight, bias):
+        return [
+            [
+                Layer.dot_product(row, vector) + bias[i]
+                for i, row in enumerate(weight)
+            ] for vector in input_
+        ]
+    
     def forward(self, X):
         # reimplemented as self contained for loop. Cool, huh?
         self.last_input_batch = copy_md_list(X)
-        output = [
-            [
-                self.dot_product(neuron, last_input) + self.bias[i]
-                for i, neuron in enumerate(self.weight)
-            ] for last_input in self.last_input_batch
-        ]
-        return output
+        return self.linear(X, self.weight, self.bias)
     
     # we compressed the backprop so now its just a simple as 1 and 2
     def backward(self, upstream_gradient_batch, learning_rate): 
@@ -170,13 +173,13 @@ class Softmax:
 
 class Neural_Net:
     def __init__(self, input_size, *hidden_layers, output_size=None, activation_func=None):
+        self.last_input_batch = None
         self.last_output_batch = None
         self.net = []
-        self.backprop_calculator = []
         self.output_func = Softmax()
         if activation_func is None:
             activation_func = relu_activator
-        sizes = [input_size] + list(hidden_layers) + [] if output_size is None else [output_size]
+        sizes = [input_size] + list(hidden_layers) + ([output_size] if output_size else [])
         for i, (inp, oup) in enumerate(zip(sizes, sizes[1:])):
             self.net.append(Layer(inp, oup))
             if i == len(sizes) - 2:

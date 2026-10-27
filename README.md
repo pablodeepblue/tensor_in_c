@@ -1,6 +1,6 @@
 # Tensor in C
 
-Learn how neural networks and transformers actually work by building them from scratch, first in plain Python, then in C, with **zero external libraries**.
+Learn how neural networks and transformers actually work by building them from scratch, first in plain Python, then in C, with **zero external libraries** (with the exception of those used to load datasets from sources such as sklearn)
 
 This is both a personal exercise and a tutorial. Each stage re implements the previous one at a lower level, so you can see exactly what frameworks like PyTorch are doing under the hood.
 
