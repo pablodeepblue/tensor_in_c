@@ -27,7 +27,3 @@ git clone https://github.com/pablodeepblue/tensor_in_c.git
 cd tensor_in_c
 uv sync
 ```
-
-<!-- Add: how to run the first example, e.g. `uv run python src/tensor_in_c/<file>.py` -->
-
-## Project structure
