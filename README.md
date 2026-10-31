@@ -1,4 +1,5 @@
 # Tensor in C
+(Full explanation blog)[https://pablodeepblue.github.io/blog/tensor-in-C/]
 
 Learn how neural networks and transformers actually work by building them from scratch, first in plain Python, then with C implementation to speed it up, with **zero external libraries** (with the exception of those used to load datasets from sources such as sklearn)
 
