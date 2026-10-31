@@ -1,6 +1,6 @@
 # Tensor in C
 
-Learn how neural networks and transformers actually work by building them from scratch, first in plain Python, then in C, with **zero external libraries** (with the exception of those used to load datasets from sources such as sklearn)
+Learn how neural networks and transformers actually work by building them from scratch, first in plain Python, then with C implementation to speed it up, with **zero external libraries** (with the exception of those used to load datasets from sources such as sklearn)
 
 This is both a personal exercise and a tutorial. Each stage re implements the previous one at a lower level, so you can see exactly what frameworks like PyTorch are doing under the hood.
 
@@ -15,6 +15,7 @@ Most ML tutorials start with `import torch`. This repo starts with nothing: no N
 | 1 | A neural net from scratch | Python | [x] | 100% |
 | 2 | Improving the layer Struct | Python | [x] | 100% |
 | 3 | Batching the inputs | Python | [x] | ~98% |
+| 3 | Batching the inputs | Python | [ ] | Not done |
 
 ## Getting started
 

@@ -13,7 +13,6 @@ class Neuron:
         self.weights = [random.gauss(0, 1)*0.1 for _ in range(input_size)]
         self.input_size = input_size
         self.bias = 0
-        # these 2 are needed for backprop
         self.last_input = None
 
     @staticmethod
@@ -86,8 +85,6 @@ alpha = 0.001
 
 def sigmoid(x):
     return 1/(1 + exp(-x))
-
-
 
 def tanh(x):
     return (2 / (1 + exp(-2*x))) - 1

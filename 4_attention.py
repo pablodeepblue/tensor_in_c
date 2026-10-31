@@ -168,6 +168,9 @@ def scaled_dot_product_attention(K, Q, V):
     attention = softmax(attention_linear(K, Q))
     return linear(attention, V)
 
+def sum_2d(*matrices):
+    return [[sum(vals) for vals in zip(*rows)] for rows in zip(*matrices)]
+
 class Head:
     def __init__(self, input_size, attention_size):
         self.dk = attention_size
@@ -184,18 +187,96 @@ class Head:
         K = self.W_k(X)
         V = self.W_v(X)
 
-        attention_weights = softmax(attention_linear(K, Q))
+        A = softmax(attention_linear(K, Q))
         output = linear(attention_weights, V)
 
         self.last_Q = copy_md_list(Q)
         self.last_K = copy_md_list(K)
-        self.last_A = copy_md_list(attention_weights)
+        self.last_A = copy_md_list(A)
         self.last_V = copy_md_list(V)
         
         return output
 
     def backward(self, X):
-        pass
+        Q = self.last_Q
+        K = self.last_K
+        V = self.last_V
+        A = self.last_A
+
+        dO = upstream_gradient_batch
+
+        batch_len = len(A)
+        dk = self.dk
+        scale = 1.0 / math.sqrt(dk)
+
+        dA = [
+            [
+                sum(dO[t][j] * V[s][j] for j in range(dk))
+                for s in range(batch_len)
+            ]
+            for t in range(batch_len)
+        ]
+
+        dV = [
+            [
+                sum(A[t][s] * dO[t][j] for t in range(batch_len))
+                for j in range(dk)
+            ]
+            for s in range(batch_len)
+        ]
+
+        dS = []
+
+        for t in range(seq_len):
+            row_dot = sum(
+                A[t][s] * dA[t][s]
+                for s in range(seq_len)
+            )
+
+            dS.append([
+                A[t][s] * (dA[t][s] - row_dot)
+                for s in range(seq_len)
+            ])
+
+        dQ = [
+            [
+                scale * sum(
+                    dS[t][s] * K[s][j]
+                    for s in range(seq_len)
+                )
+                for j in range(dk)
+            ]
+            for t in range(seq_len)
+        ]
+
+        dK = [
+            [
+                scale * sum(
+                    dS[t][s] * Q[t][j]
+                    for t in range(seq_len)
+                )
+                for j in range(dk)
+            ]
+            for s in range(seq_len)
+        ]
+
+        dX_q = self.W_q.backward(dQ, learning_rate)
+        dX_k = self.W_k.backward(dK, learning_rate)
+        dX_v = self.W_v.backward(dV, learning_rate)
+
+
+        dX = [
+            [
+                dX_q[t][j] + dX_k[t][j] + dX_v[t][j]
+                for j in range(len(dX_q[t]))
+            ]
+            for t in range(len(dX_q))
+        ]
+
+        return dX
+
+
+
 
     def __call__(self, X):
         return self.forward(X)
@@ -255,11 +336,6 @@ class MultiHead:
     
     def __call__(self, X):
         return self.forward(X)
-
-
-        
-
-
 
 #added this for simplicity sake
 def get_acc(network, X, Y):
