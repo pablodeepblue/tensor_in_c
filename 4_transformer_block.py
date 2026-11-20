@@ -123,10 +123,9 @@ class Neural_Net:
     def __init__(self, input_size, *hidden_layers, output_size=None, activation_func=None):
         self.last_output_batch = None
         self.net = []
-        self.output_func = Softmax()
         if activation_func is None:
             activation_func = relu_activator
-        sizes = [input_size] + list(hidden_layers) + [] if output_size is None else [output_size]
+        sizes = [input_size] + list(hidden_layers) + ([output_size] if output_size is not None else [])
         for i, (inp, oup) in enumerate(zip(sizes, sizes[1:])):
             self.net.append(Layer(inp, oup))
             if i == len(sizes) - 2:
@@ -139,18 +138,13 @@ class Neural_Net:
         y = X
         for layer in self.net:
             y = layer(y)
-        self.last_output_batch = self.output_func(y)
-        return self.last_output_batch
+        return y
     
-    def backward(self, true_batch, learning_rate):
-        grad = [
-            [
-                (out - true_per)
-                for out, true_per in zip(last_output, true)
-            ] for true, last_output, last_input in zip(true_batch, self.last_output_batch, self.last_input_batch)
-        ] 
+    # make nn a generic
+    def backward(self, grad, learning_rate):
         for layer in self.net[::-1]:
             grad = layer.backward(grad, learning_rate)
+        return grad
 
     def __call__(self, X):
         return self.forward(X)
@@ -164,9 +158,8 @@ def softmax(X):
         out_batch.append([z/s for z in Z])
     return out_batch
 
-def scaled_dot_product_attention(K, Q, V):
-    attention = softmax(attention_linear(K, Q))
-    return linear(attention, V)
+def transpose(M):
+    return [list(r) for r in zip(*M)]
 
 def sum_2d(*matrices):
     return [[sum(vals) for vals in zip(*rows)] for rows in zip(*matrices)]
@@ -188,7 +181,7 @@ class Head:
         V = self.W_v(X)
 
         A = softmax(attention_linear(K, Q))
-        output = linear(attention_weights, V)
+        output = linear(A, transpose(V))
 
         self.last_Q = copy_md_list(Q)
         self.last_K = copy_md_list(K)
@@ -197,7 +190,7 @@ class Head:
         
         return output
 
-    def backward(self, X):
+    def backward(self, upstream_gradient_batch, learning_rate):
         Q = self.last_Q
         K = self.last_K
         V = self.last_V
@@ -206,8 +199,9 @@ class Head:
         dO = upstream_gradient_batch
 
         batch_len = len(A)
+        seq_len = batch_len
         dk = self.dk
-        scale = 1.0 / math.sqrt(dk)
+        scale = 1.0 / sqrt(dk)
 
         dA = [
             [
@@ -275,9 +269,6 @@ class Head:
 
         return dX
 
-
-
-
     def __call__(self, X):
         return self.forward(X)
         
@@ -289,19 +280,17 @@ class MultiHead:
             attention_size = input_size
         if output_size is None:
             output_size = input_size
+        self.attention_size = attention_size
         self.num_heads = num_heads
-        self.heads = [Head(input_size, attention_size) for _ in range(4)]
+        self.heads = [Head(input_size, attention_size) for _ in range(num_heads)]
         self.W_o = Layer(self.num_heads*attention_size, output_size)
     
+    @staticmethod
     def concat(*batches):
-        out = []
-        for batch in batches:
-            for item in batch:
-                out.append(item)
-        return out
+        return [sum(rows, []) for rows in zip(*batches)]
 
     def forward(self, X):
-        pre_out = concat(
+        pre_out = self.concat(
             *[head(X) for head in self.heads]
         )
         return self.W_o(pre_out)
@@ -330,18 +319,143 @@ class MultiHead:
             for t, row in enumerate(head_dX):
                 for j, value in enumerate(row):
                     dX[t][j] += value
-
         return dX
 
     
     def __call__(self, X):
         return self.forward(X)
 
-#added this for simplicity sake
-def get_acc(network, X, Y):
-    return [argmax(y_) == y for y_, y in zip(network(X), Y)]
-        
-# in the end we sacrifice some model performance but we do get
-# benefits in actual perf
+
+class LayerNorm:
+    def __init__(self, size, epsilon=1e-5):
+        self.size = size
+        self.epsilon = epsilon
+        self.gamma = [1.0] * size
+        self.beta = [0.0] * size
+        self.last_normalized = None
+        self.last_inverse_std = None
+
+    def forward(self, X):
+        self.last_normalized = []
+        self.last_inverse_std = []
+        output = []
+        for row in X:
+            mean = sum(row) / self.size
+            variance = sum((value - mean) ** 2 for value in row) / self.size
+            inverse_std = 1.0 / sqrt(variance + self.epsilon)
+            normalized = [(value - mean) * inverse_std for value in row]
+            self.last_normalized.append(normalized)
+            self.last_inverse_std.append(inverse_std)
+            output.append([self.gamma[j] * value + self.beta[j] for j, value in enumerate(normalized)])
+        return output
+
+    def backward(self, upstream_gradient_batch, learning_rate):
+        gamma_gradient = [0.0] * self.size
+        beta_gradient = [0.0] * self.size
+        input_gradient = []
+        for normalized, inverse_std, upstream in zip(self.last_normalized, self.last_inverse_std, upstream_gradient_batch):
+            scaled_gradient = [upstream[j] * self.gamma[j] for j in range(self.size)]
+            mean_gradient = sum(scaled_gradient) / self.size
+            normalized_gradient = sum(scaled_gradient[j] * normalized[j] for j in range(self.size)) / self.size
+            input_gradient.append([
+                inverse_std * (scaled_gradient[j] - mean_gradient - normalized[j] * normalized_gradient)
+                for j in range(self.size)
+            ])
+            for j in range(self.size):
+                gamma_gradient[j] += upstream[j] * normalized[j]
+                beta_gradient[j] += upstream[j]
+        count = len(upstream_gradient_batch)
+        for j in range(self.size):
+            self.gamma[j] -= learning_rate * gamma_gradient[j] / count
+            self.beta[j] -= learning_rate * beta_gradient[j] / count
+        return input_gradient
+
+    def __call__(self, X):
+        return self.forward(X)
+
+
+class TransformerBlock:
+    def __init__(self, att_input_size, att_output_size, mlp_output_size, num_heads=4, feed_forward_size=None):
+        if feed_forward_size is None:
+            feed_forward_size = 4 * att_output_size
+        self.attention = MultiHead(att_input_size, num_heads=num_heads, output_size=att_output_size)
+        self.attention_residual = Layer(att_input_size, att_output_size) if att_input_size != att_output_size else None
+        self.attention_norm = LayerNorm(att_output_size)
+        self.mlp = Neural_Net(att_output_size, feed_forward_size, mlp_output_size)
+        self.mlp_residual = Layer(att_output_size, mlp_output_size) if att_output_size != mlp_output_size else None
+        self.mlp_norm = LayerNorm(mlp_output_size)
+
+    def forward(self, X):
+        residual = X if self.attention_residual is None else self.attention_residual(X)
+        attention_output = self.attention(X)
+        attention_output = [[a + b for a, b in zip(row_a, row_b)] for row_a, row_b in zip(attention_output, residual)]
+        normalized_attention = self.attention_norm(attention_output)
+        mlp_residual = normalized_attention if self.mlp_residual is None else self.mlp_residual(normalized_attention)
+        mlp_output = self.mlp(normalized_attention)
+        return self.mlp_norm([[a + b for a, b in zip(row_a, row_b)] for row_a, row_b in zip(mlp_output, mlp_residual)])
+
+    def backward(self, upstream_gradient_batch, learning_rate):
+        grad = self.mlp_norm.backward(upstream_gradient_batch, learning_rate)
+        grad_residual = copy_md_list(grad)
+        grad_mlp = self.mlp.backward(grad, learning_rate)
+        grad_mlp_residual = grad_residual if self.mlp_residual is None else self.mlp_residual.backward(grad_residual, learning_rate)
+        grad_attention_input = [
+            [a + b for a, b in zip(row_a, row_b)]
+            for row_a, row_b in zip(grad_mlp_residual, grad_mlp)
+        ]
+        grad_attention_input = self.attention_norm.backward(grad_attention_input, learning_rate)
+        grad_residual = copy_md_list(grad_attention_input)
+        grad_attention = self.attention.backward(grad_attention_input, learning_rate)
+        if self.attention_residual is None:
+            grad_residual_input = grad_residual
+        else:
+            grad_residual_input = self.attention_residual.backward(grad_residual, learning_rate)
+        return [
+            [a + b for a, b in zip(row_a, row_b)]
+            for row_a, row_b in zip(grad_attention, grad_residual_input)
+        ]
+
+    def __call__(self, X):
+        return self.forward(X)
+
+
+#generated tests
 if __name__ == "__main__":
-    pass
+    random.seed(42)
+
+    width = 4
+    classes = 2
+    sequence_length = 6
+    steps = 10000
+    learning_rate = 0.03
+    block = TransformerBlock(width, width, classes, num_heads=2)
+
+    def make_example():
+        values = [[random.gauss(0, 1) for _ in range(width)] for _ in range(sequence_length)]
+        targets = [[1, 0] if row[0] < 0 else [0, 1] for row in values]
+        return values, targets
+
+    def evaluate(sample_count=100):
+        correct = 0
+        count = 0
+        for _ in range(sample_count):
+            values, targets = make_example()
+            output = block(values)
+            correct += sum(max(range(classes), key=row.__getitem__) == max(range(classes), key=target.__getitem__) for row, target in zip(output, targets))
+            count += len(targets)
+        return correct / count
+
+    from time import perf_counter
+
+    before = evaluate()
+    start = perf_counter()
+    for _ in range(steps):
+        values, targets = make_example()
+        output = block(values)
+        gradient = [[a - b for a, b in zip(out_row, target_row)] for out_row, target_row in zip(output, targets)]
+        block.backward(gradient, learning_rate)
+    after = evaluate()
+    elapsed = perf_counter() - start
+
+    print(f"prelearning {before}")
+    print(f"postlearning {after}; time {elapsed}")
